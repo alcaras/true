@@ -4,6 +4,12 @@ import sys
 import traceback
 import time
 
+# parse for insignificant, e.g. [url]https://dotabuff.com/matches/69598187[/url]
+# store duration as number of seconds? (convert from string)
+# better means of storing items
+# add duration win bonus, see http://fantasy.dota-academy.com/Faq
+# consider alterative point system based on pub stats
+
 
 import urllib2
 from dateutil import parser as dt_parser
@@ -62,9 +68,10 @@ def grab_match_ids(id, pnum):
   if pnum == 1:
     regex_2 = 'page=(\d*)">Last '
     match = re.findall(regex_2, data)
-    if match is None:
+    try:
+      return [ids, match[0]]
+    except IndexError, e:
       return [ids, -1]
-    return [ids, match[0]]
   else:
     return [ids, -1]
 
@@ -153,11 +160,11 @@ def grab_match(id):
     # player id
       
     regex_p = "/players/(\d*)"
-    match = re.findall(regex_p,  etree.tostring(proot.findall('.//td/a')[0]))
     try:
+      match = re.findall(regex_p,  etree.tostring(proot.findall('.//td/a')[0]))
       pl["player"] = match[0]
     except IndexError, e:
-      print id, "is a bot game"
+      print id, "is a bot game/old bugged game"
       return -2 # this is a bot game
 
     # player hero
@@ -252,44 +259,70 @@ def grab_match(id):
 
 
 name_id = {
-  "alcaras": "32775483",
-  "rip" : "8899909",
-  "speed": "9541377",
-  "krygore" : "9929964",
-  "vorsh" : "703282",
-  "m1gemini" : "8807692",
-  "Skolops" : "115058462",
-# all done with these
-#           "wyv": "64684222",
-#           "boozie" : "537293",
-#           "anias" : "32457950",
-#           "Brewskis" : "33402007",
+ "alcaras": "32775483",
+ "rip" : "8899909",
+ "speed": "9541377",
+ "krygore" : "9929964",
+ "vorsh" : "703282",
+ "m1gemini" : "8807692",
+ "Skolops" : "115058462",
+ "wyv": "64684222",
+ "boozie" : "537293",
+ "anias" : "32457950",
+ "Brewskis" : "33402007",
 
 
-# holding off on these
-#            "lostsights" : "431886",
-#            "dgeis7121" : "100516439", 
-#            "Sekans_Aval" : "30473417",
-#            "Janker" : "55376440", 
-#            "Redbox" : "40453657",
+ "lostsights" : "431886",
+ "dgeis7121" : "100516439", 
+ "Sekans_Aval" : "30473417",
+ "Janker" : "55376440", 
+ "Redbox" : "40453657",
+
+
+#   "dendi" : "70388657",
+#   "dendimon" : "103741548",
+# dendi
+
+
            }
-bte
-up_through = '' # the latest id we've parsed through (pull from the db)
+
+up_through = session.query(Score.game_id).order_by(Score.game_id.desc()).first()[0]
+up_through -= 3000000 # peer back a bit in case we missed something
 
 for k, v in name_id.iteritems():
   print dt.now(), "starting ", k
   # figure out how many pages there are
-  ids, max_page = grab_match_ids(v, 1)
+  try:
+    ids, max_page = grab_match_ids(v, 1)
+    time.sleep(0.4)
+  except urllib2.HTTPError, e:
+    print "page 1 failed"
+    print dt.now(), e.code
+    time.sleep(10)
+    continue
+  except Exception, e:
+    print "page 1 failed in an unexpected way"
+    print  dt.now(), "Exception:", e, sys.exc_info()[0]
+    print '-'*60
+    traceback.print_exc(file=sys.stdout)
+    print '-'*60
+    time.sleep(3)
+    continue
+    
   print dt.now(), k, "page 1 of ", max_page
   for id in ids:
     try:
-      grab_match(id)     
+      if int(id) < up_through:
+        break
+      grab_match(id) 
       time.sleep(0.4)
     except urllib2.HTTPError, e:
+        print id
         print dt.now(), e.code
         time.sleep(10)
         continue
     except Exception, e:
+        print id
         print  dt.now(), "Exception:", e, sys.exc_info()[0]
         print '-'*60
         traceback.print_exc(file=sys.stdout)
@@ -298,17 +331,38 @@ for k, v in name_id.iteritems():
         continue
   print
   for i in range(2, int(max_page)+1):
+    if int(id) < up_through:
+      break
     print dt.now(), k, "page ", i, " of ", max_page
-    ids, _ = grab_match_ids(v, i)
+    try:
+      ids, _ = grab_match_ids(v, i)
+    except urllib2.HTTPError, e:
+      print "page ",i," failed"
+      i = i-1
+      print dt.now(), e.code
+      time.sleep(10)
+      continue
+    except Exception, e:
+      print "page 1 failed in an unexpected way"
+      print  dt.now(), "Exception:", e, sys.exc_info()[0]
+      print '-'*60
+      traceback.print_exc(file=sys.stdout)
+      print '-'*60
+      time.sleep(3)
+      continue
     for id in ids:
+      if int(id) < up_through:
+        break
       try:
         grab_match(id)
         time.sleep(0.4)
       except urllib2.HTTPError, e:
+        print id
         print dt.now(), e.code
         time.sleep(10)
         continue
       except Exception, e:
+        print id
         print  dt.now(), "Exception:", e, sys.exc_info()[0]
         print '-'*60
         traceback.print_exc(file=sys.stdout)
